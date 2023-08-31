@@ -12,7 +12,9 @@ include_directories(
 
 add_executable(consumer
     main.cpp
-    src/consumer.cpp)
+    src/consumer.cpp
+    ../common/utils.cpp
+)
 
 target_link_libraries(consumer PUBLIC
     ${CMAKE_SOURCE_DIR}/common/lib/libglog.so.0.6.0
