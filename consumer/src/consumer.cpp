@@ -31,6 +31,8 @@ static int verbosity = 1;
 static long msg_cnt = 0;
 static int64_t msg_bytes = 0;
 
+int http_send(const std::string &host, const uint16_t port, const std::string &body);
+
 class ExampleEventCb : public RdKafka::EventCb
 {
 public:
@@ -151,10 +153,10 @@ void msg_consume(RdKafka::Message *message, void *opaque)
 
     case RdKafka::ERR_NO_ERROR:
         /* Real message */
-        std::cout << "Read msg at offset " << message->offset() << std::endl;
+        INFO_LOG() << "Read msg at offset " << message->offset();
         if (message->key())
         {
-            std::cout << "Key: " << *message->key() << std::endl;
+            INFO_LOG() << "Key: " << *message->key();
         }
         headers = message->headers();
         if (headers)

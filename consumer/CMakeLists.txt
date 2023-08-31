@@ -13,6 +13,7 @@ include_directories(
 add_executable(consumer
     main.cpp
     src/consumer.cpp
+    src/http.cpp
     ../common/utils.cpp
 )
 
