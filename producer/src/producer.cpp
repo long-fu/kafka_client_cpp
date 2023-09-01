@@ -55,12 +55,11 @@ public:
         /* If message.err() is non-zero the message delivery failed permanently
          * for the message. */
         if (message.err())
-            std::cerr << "% Message delivery failed: " << message.errstr()
-                      << std::endl;
+            ERROR_LOG() << "% Message delivery failed: " << message.errstr();
         else
-            std::cerr << "% Message delivered to topic " << message.topic_name()
-                      << " [" << message.partition() << "] at offset "
-                      << message.offset() << std::endl;
+            INFO_LOG() << "% Message delivered to topic " << message.topic_name()
+                       << " [" << message.partition() << "] at offset "
+                       << message.offset();
     }
 };
 
@@ -81,8 +80,21 @@ int producer(std::string brokers, std::string topic, void *payload, size_t len)
     if (conf->set("bootstrap.servers", brokers, errstr) !=
         RdKafka::Conf::CONF_OK)
     {
-        std::cerr << errstr << std::endl;
-        exit(1);
+        ERROR_LOG() << errstr;
+
+        return -1;
+    }
+
+    if (conf->set("message.max.bytes", "33554400", errstr) != RdKafka::Conf::CONF_OK)
+    {
+        ERROR_LOG() << errstr;
+        return -1;
+    }
+
+    if (conf->set("enable.idempotence", "true", errstr) != RdKafka::Conf::CONF_OK)
+    {
+        ERROR_LOG() << errstr;
+        return -1;
     }
 
     /* Set the delivery report callback.
@@ -100,8 +112,8 @@ int producer(std::string brokers, std::string topic, void *payload, size_t len)
 
     if (conf->set("dr_cb", &ex_dr_cb, errstr) != RdKafka::Conf::CONF_OK)
     {
-        std::cerr << errstr << std::endl;
-        exit(1);
+        ERROR_LOG() << errstr;
+        return -1;
     }
 
     /*
@@ -110,8 +122,8 @@ int producer(std::string brokers, std::string topic, void *payload, size_t len)
     RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
     if (!producer)
     {
-        std::cerr << "Failed to create producer: " << errstr << std::endl;
-        exit(1);
+        ERROR_LOG() << "Failed to create producer: " << errstr;
+        return -1;
     }
 
     delete conf;
@@ -119,8 +131,8 @@ int producer(std::string brokers, std::string topic, void *payload, size_t len)
     /*
      * Read messages from stdin and produce to broker.
      */
-    std::cout << "% Type message value and hit enter "
-              << "to produce message." << std::endl;
+    INFO_LOG() << "% Type message value and hit enter "
+               << "to produce message.";
 
     if (len == 0)
     {
@@ -153,8 +165,8 @@ retry:
 
     if (err != RdKafka::ERR_NO_ERROR)
     {
-        std::cerr << "% Failed to produce to topic " << topic << ": "
-                  << RdKafka::err2str(err) << std::endl;
+        ERROR_LOG() << "% Failed to produce to topic " << topic << ": "
+                    << RdKafka::err2str(err);
 
         if (err == RdKafka::ERR__QUEUE_FULL)
         {
@@ -174,8 +186,8 @@ retry:
     }
     else
     {
-        std::cerr << "% Enqueued message (" << len << " bytes) "
-                  << "for topic " << topic << std::endl;
+        INFO_LOG() << "% Enqueued message (" << len << " bytes) "
+                   << "for topic " << topic;
     }
 
     /* A producer application should continually serve
@@ -193,12 +205,12 @@ retry:
     /* Wait for final messages to be delivered or fail.
      * flush() is an abstraction over poll() which
      * waits for all messages to be delivered. */
-    std::cerr << "% Flushing final messages..." << std::endl;
+    INFO_LOG() << "% Flushing final messages...";
     producer->flush(10 * 1000 /* wait for max 10 seconds */);
 
     if (producer->outq_len() > 0)
-        std::cerr << "% " << producer->outq_len()
-                  << " message(s) were not delivered" << std::endl;
+        INFO_LOG() << "% " << producer->outq_len()
+                   << " message(s) were not delivered";
 
     delete producer;
 
