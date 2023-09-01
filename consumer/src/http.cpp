@@ -3,6 +3,12 @@
 #include <oatpp/parser/json/mapping/ObjectMapper.hpp>
 #include <oatpp/network/tcp/client/ConnectionProvider.hpp>
 #include <oatpp/web/client/ApiClient.hpp>
+
+#include <oatpp/network/tcp/server/ConnectionProvider.hpp>
+#include <oatpp/network/monitor/ConnectionMonitor.hpp>
+#include <oatpp/network/monitor/ConnectionInactivityChecker.hpp>
+#include <oatpp/network/monitor/ConnectionMaxAgeChecker.hpp>
+#include <oatpp/core/macro/component.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 
 #include "utils.h"
@@ -26,11 +32,35 @@ class ConsumerApiClient : public oatpp::web::client::ApiClient
 
 static std::shared_ptr<oatpp::web::client::RequestExecutor> createOatppExecutor(const oatpp::network::Address &address)
 {
-    auto connectionProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(address);
+    OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ClientConnectionProvider>, clientConnectionProvider)
+    ("http-provider", []
+     {
+         // Create TCP connection provider
+         auto tcpProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(
+             {"127.0.0.1", 8080, oatpp::network::Address::IP_4});
+
+         // Monitor over TCP connection provider
+         auto monitor = std::make_shared<oatpp::network::monitor::ConnectionMonitor>(tcpProvider);
+
+         monitor->addMetricsChecker(std::make_shared<oatpp::network::monitor::ConnectionInactivityChecker>(
+             std::chrono::milliseconds(800), // last successful read timeout
+             std::chrono::milliseconds(800)  // last successful write timeout
+             ));
+         monitor->addMetricsChecker(std::make_shared<oatpp::network::monitor::ConnectionMaxAgeChecker>(
+             std::chrono::seconds(3) // connection max-age
+             ));
+
+         return monitor;
+
+
+     }());
+
+    auto connectionProvider = clientConnectionProvider.getObject();
+    // auto connectionProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(address);
     return oatpp::web::client::HttpRequestExecutor::createShared(connectionProvider);
 }
 
-static int run_http_request(const std::string &host, const v_uint16 port, std::string body)
+int run_http_request(const std::string &host, const v_uint16 port, std::string body)
 {
 
     /* Create ObjectMapper for serialization of DTOs  */
@@ -48,8 +78,8 @@ static int run_http_request(const std::string &host, const v_uint16 port, std::s
 
     // TODO: 处理结果
 
-    // OATPP_LOGD("TAG", "[alarmPost] data='%s'", data->c_str());
-    
+    OATPP_LOGD("TAG", "[alarmPost] data='%s'", data->c_str());
+
     return 0;
 }
 
@@ -59,7 +89,7 @@ static char *g_body_buf = NULL;
 
 int http_send(const char *msg, size_t msg_len)
 {
-    
+
     int ret = 0;
 
     if (msg == NULL || msg_len == 0)
