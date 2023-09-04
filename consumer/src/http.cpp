@@ -11,6 +11,21 @@
 #include <oatpp/core/macro/component.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 
+#include "oatpp/web/client/HttpRequestExecutor.hpp"
+#include "oatpp/web/server/AsyncHttpConnectionHandler.hpp"
+#include "oatpp/web/server/HttpConnectionHandler.hpp"
+#include "oatpp/web/server/HttpRouter.hpp"
+#include "oatpp/web/protocol/http/outgoing/StreamingBody.hpp"
+
+#include "oatpp/network/monitor/ConnectionMonitor.hpp"
+#include "oatpp/network/monitor/ConnectionMaxAgeChecker.hpp"
+
+#include "oatpp/network/Server.hpp"
+#include "oatpp/network/tcp/client/ConnectionProvider.hpp"
+#include "oatpp/network/tcp/server/ConnectionProvider.hpp"
+
+#include <thread>
+
 #include "utils.h"
 
 using namespace oatpp::network;
@@ -30,55 +45,56 @@ class ConsumerApiClient : public oatpp::web::client::ApiClient
 #include OATPP_CODEGEN_END(ApiClient)
 };
 
-static std::shared_ptr<oatpp::web::client::RequestExecutor> createOatppExecutor(const oatpp::network::Address &address)
-{
-    OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ClientConnectionProvider>, clientConnectionProvider)
-    ("http-provider", []
-     {
-         // Create TCP connection provider
-         auto tcpProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(
-             {"127.0.0.1", 8080, oatpp::network::Address::IP_4});
-
-         // Monitor over TCP connection provider
-         auto monitor = std::make_shared<oatpp::network::monitor::ConnectionMonitor>(tcpProvider);
-
-         monitor->addMetricsChecker(std::make_shared<oatpp::network::monitor::ConnectionInactivityChecker>(
-             std::chrono::milliseconds(800), // last successful read timeout
-             std::chrono::milliseconds(800)  // last successful write timeout
-             ));
-         monitor->addMetricsChecker(std::make_shared<oatpp::network::monitor::ConnectionMaxAgeChecker>(
-             std::chrono::seconds(3) // connection max-age
-             ));
-
-         return monitor;
-
-
-     }());
-
-    auto connectionProvider = clientConnectionProvider.getObject();
-    // auto connectionProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(address);
-    return oatpp::web::client::HttpRequestExecutor::createShared(connectionProvider);
-}
-
 int run_http_request(const std::string &host, const v_uint16 port, std::string body)
 {
 
     /* Create ObjectMapper for serialization of DTOs  */
     auto objectMapper = oatpp::parser::json::mapping::ObjectMapper::createShared();
 
-    /* Create RequestExecutor which will execute ApiClient's requests */
-    auto requestExecutor = createOatppExecutor({host, port}); // <-- Always use oatpp native executor where's possible.
-    // auto requestExecutor = createCurlExecutor();  // <-- Curl request executor
+    auto connectionProvider = oatpp::network::tcp::client::ConnectionProvider::createShared(
+        {"localhost", 8080});
+
+    auto m_monitor = std::make_shared<oatpp::network::monitor::ConnectionMonitor>(connectionProvider);
+
+    /* close all connections that stay opened for more than 120 seconds */
+    m_monitor->addMetricsChecker(
+        std::make_shared<oatpp::network::monitor::ConnectionMaxAgeChecker>(
+            std::chrono::seconds(1)));
+
+    /* close all connections that have had no successful reads and writes for longer than 5 seconds */
+    m_monitor->addMetricsChecker(
+        std::make_shared<oatpp::network::monitor::ConnectionInactivityChecker>(
+            std::chrono::milliseconds(500),
+            std::chrono::milliseconds(500)));
+
+    auto m_executor = oatpp::web::client::HttpRequestExecutor::createShared(m_monitor);
+
+    // /* Create RequestExecutor which will execute ApiClient's requests */
+    // auto requestExecutor = createOatppExecutor({host, port}); // <-- Always use oatpp native executor where's possible.
+    // // auto requestExecutor = createCurlExecutor();  // <-- Curl request executor
+
 
     /* DemoApiClient uses DemoRequestExecutor and json::mapping::ObjectMapper */
     /* ObjectMapper passed here is used for serialization of outgoing DTOs */
-    auto client = ConsumerApiClient::createShared(requestExecutor, objectMapper);
+    auto client = ConsumerApiClient::createShared(m_executor, objectMapper);
 
-    auto data = client->alarmPost(body)->readBodyToString();
+    auto data = client->alarmPost(body);
+    
+    OATPP_LOGD("TAG", "[alarmPost] data= %d '%s'", data->getStatusCode(), data->getStatusDescription()->c_str());
+
+    if(data->getStatusCode() == 200) {
+
+    } else {
+        
+    }
+    // requestExecutor->execute("POST", "api/smartbox/AlarmPost", alarmPost, BODY_STRING(String, body));
+    // auto data = requestExecutor->executeAsync("POST",
+    // "/api/smartbox/AlarmPost",
+    // oatpp::web::protocol::http::Headers({}), nullptr, nullptr);
 
     // TODO: 处理结果
 
-    OATPP_LOGD("TAG", "[alarmPost] data='%s'", data->c_str());
+    // OATPP_LOGD("TAG", "[alarmPost] data='%s'", data->c_str());
 
     return 0;
 }

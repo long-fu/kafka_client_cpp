@@ -4,6 +4,8 @@ project(consumer_client VERSION 0.1.0 LANGUAGES C CXX)
 include(CTest)
 enable_testing()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread")
+
 include_directories(
     ../common/include/
     ../common/
