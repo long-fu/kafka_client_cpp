@@ -10,13 +10,17 @@ include_directories(
     inc/
 )
 
+add_library(producer_run SHARED
+    src/producer.cpp
+)
+
 add_executable(producer
     main.cpp
-    src/producer.cpp
     ../common/utils.cpp
 )
 
 target_link_libraries(producer PUBLIC
+    producer_run
     ${CMAKE_SOURCE_DIR}/common/lib/libglog.so.0.6.0
     ${CMAKE_SOURCE_DIR}/common/lib/librdkafka++.so.1
     ${CMAKE_SOURCE_DIR}/common/lib/librdkafka.so.1
